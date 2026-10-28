@@ -28,6 +28,22 @@ class ShipmentService
     }
 
     /**
+     * Delete a shipment and its associated billing statement.
+     */
+    public function delete(Shipment $shipment): void
+    {
+        DB::transaction(function () use ($shipment) {
+            $shipment = Shipment::query()
+                ->whereKey($shipment->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $shipment->billingStatement()->delete();
+            $shipment->delete();
+        });
+    }
+
+    /**
      * Save the shipment, check bay capacity,
      * and calculate storage fees.
      */
@@ -36,39 +52,25 @@ class ShipmentService
         ?Shipment $shipment = null
     ): Shipment {
         return DB::transaction(function () use ($data, $shipment) {
-
-            // Preserve the existing shipping fee during updates
-            // when the request does not provide a new one.
             $shippingFee = array_key_exists('shipping_fee', $data)
                 ? (float) $data['shipping_fee']
                 : (float) (
                     $shipment?->billingStatement?->shipping_fee ?? 0
                 );
 
-            // Shipping fee is stored in the billing statement,
-            // not in the shipments table.
             unset($data['shipping_fee']);
 
-            // Lock the selected warehouse bay while checking capacity.
             $bay = WarehouseBay::query()
                 ->whereKey($data['warehouse_bay_id'])
                 ->lockForUpdate()
                 ->firstOrFail();
 
-            // Count shipments still occupying the bay:
-            // 1. Shipments without a dispatch date.
-            // 2. Shipments scheduled for a future dispatch date.
             $occupiedShipments = Shipment::query()
                 ->where('warehouse_bay_id', $bay->id)
                 ->where(function ($query) {
                     $query->whereNull('dispatch_date')
-                        ->orWhereDate(
-                            'dispatch_date',
-                            '>',
-                            today()
-                        );
+                        ->orWhereDate('dispatch_date', '>', today());
                 })
-                // Do not count the shipment being updated twice.
                 ->when(
                     $shipment,
                     fn ($query) => $query->where(
@@ -86,8 +88,6 @@ class ShipmentService
 
             $newWeight = (float) $data['weight_kg'];
             $newVolume = (float) $data['volume_cbm'];
-
-            // Determine whether this shipment will occupy the bay.
             $dispatchDate = $data['dispatch_date'] ?? null;
 
             $willOccupyBay = $dispatchDate === null
@@ -95,39 +95,34 @@ class ShipmentService
                     ->startOfDay()
                     ->gt(today());
 
-            // Reject shipments that exceed the maximum weight.
-          // Check capacity only if the shipment will occupy the bay.
-if ($willOccupyBay) {
-    if (
-        $currentWeight + $newWeight
-        > (float) $bay->max_weight_kg
-    ) {
-        throw ValidationException::withMessages([
-            'weight_kg' =>
-                'This shipment exceeds the warehouse bay weight capacity.',
-        ]);
-    }
+            if ($willOccupyBay) {
+                if (
+                    $currentWeight + $newWeight
+                    > (float) $bay->max_weight_kg
+                ) {
+                    throw ValidationException::withMessages([
+                        'weight_kg' =>
+                            'This shipment exceeds the warehouse bay weight capacity.',
+                    ]);
+                }
 
-    if (
-        $currentVolume + $newVolume
-        > (float) $bay->max_volume_cbm
-    ) {
-        throw ValidationException::withMessages([
-            'volume_cbm' =>
-                'This shipment exceeds the warehouse bay volume capacity.',
-        ]);
-    }
-}
+                if (
+                    $currentVolume + $newVolume
+                    > (float) $bay->max_volume_cbm
+                ) {
+                    throw ValidationException::withMessages([
+                        'volume_cbm' =>
+                            'This shipment exceeds the warehouse bay volume capacity.',
+                    ]);
+                }
+            }
 
-            // Create or update the shipment.
             if ($shipment) {
                 $shipment->update($data);
             } else {
                 $shipment = Shipment::create($data);
             }
 
-            // Calculate storage duration, including arrival and
-            // dispatch dates. Active shipments accrue through today.
             $arrivalDate = $shipment->arrival_date
                 ->copy()
                 ->startOfDay();
@@ -136,21 +131,18 @@ if ($willOccupyBay) {
                 ? $shipment->dispatch_date->copy()->startOfDay()
                 : now()->startOfDay();
 
-            // Avoid a negative storage duration for future arrivals.
             if ($endDate->lt($arrivalDate)) {
                 $endDate = $arrivalDate->copy();
             }
 
             $storageDays = $arrivalDate->diffInDays($endDate) + 1;
 
-            // Get the daily storage rate for this cargo category.
             $storageRate = (float) $shipment
                 ->cargoCategory()
                 ->value('daily_storage_rate');
 
             $storageFee = $storageRate * $storageDays;
 
-            // Create or update the billing statement.
             BillingStatement::updateOrCreate(
                 ['shipment_id' => $shipment->id],
                 [
@@ -160,7 +152,6 @@ if ($willOccupyBay) {
                 ]
             );
 
-            // Return the shipment with its related records loaded.
             return $shipment->load([
                 'sender',
                 'receiver',

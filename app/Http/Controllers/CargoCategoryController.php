@@ -5,20 +5,19 @@ namespace App\Http\Controllers;
 use App\Http\Requests\StoreCargoCategoryRequest;
 use App\Http\Requests\UpdateCargoCategoryRequest;
 use App\Models\CargoCategory;
+use App\Services\CargoCategoryService;
+use Illuminate\Http\RedirectResponse;
 use Inertia\Inertia;
 use Inertia\Response;
-use Illuminate\Http\RedirectResponse;
 
 class CargoCategoryController extends Controller
 {
-    public function index(): Response
-    {
-        $categories = CargoCategory::query()
-            ->orderBy('category_name')
-            ->paginate(10);
-
+    public function index(
+        CargoCategoryService $cargoCategoryService
+    ): Response {
         return Inertia::render('cargo-categories/index', [
-            'categories' => $categories,
+            'categories' => $cargoCategoryService
+                ->getPaginatedCategories(),
         ]);
     }
 
@@ -28,20 +27,22 @@ class CargoCategoryController extends Controller
     }
 
     public function store(
-        StoreCargoCategoryRequest $request
+        StoreCargoCategoryRequest $request,
+        CargoCategoryService $cargoCategoryService
     ): RedirectResponse {
-        CargoCategory::create($request->validated());
+        $cargoCategoryService->create($request->validated());
 
         return to_route('cargo-categories.index')
             ->with('success', 'Cargo category added successfully.');
     }
 
-    public function show(CargoCategory $cargoCategory): Response
-    {
-        $cargoCategory->loadCount('shipments');
-
+    public function show(
+        CargoCategory $cargoCategory,
+        CargoCategoryService $cargoCategoryService
+    ): Response {
         return Inertia::render('cargo-categories/show', [
-            'category' => $cargoCategory,
+            'category' => $cargoCategoryService
+                ->getCategoryWithShipmentCount($cargoCategory),
         ]);
     }
 
@@ -54,26 +55,31 @@ class CargoCategoryController extends Controller
 
     public function update(
         UpdateCargoCategoryRequest $request,
-        CargoCategory $cargoCategory
+        CargoCategory $cargoCategory,
+        CargoCategoryService $cargoCategoryService
     ): RedirectResponse {
-        $cargoCategory->update($request->validated());
+        $cargoCategoryService->update(
+            $cargoCategory,
+            $request->validated()
+        );
 
         return to_route('cargo-categories.index')
             ->with('success', 'Cargo category updated successfully.');
     }
 
     public function destroy(
-        CargoCategory $cargoCategory
+        CargoCategory $cargoCategory,
+        CargoCategoryService $cargoCategoryService
     ): RedirectResponse {
-        if ($cargoCategory->shipments()->exists()) {
+        $deleted = $cargoCategoryService->delete($cargoCategory);
+
+        if (! $deleted) {
             return to_route('cargo-categories.index')
                 ->with(
                     'error',
                     'This category cannot be deleted because it is linked to existing shipments.'
                 );
         }
-
-        $cargoCategory->delete();
 
         return to_route('cargo-categories.index')
             ->with('success', 'Cargo category deleted successfully.');

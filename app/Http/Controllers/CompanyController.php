@@ -5,21 +5,18 @@ namespace App\Http\Controllers;
 use App\Http\Requests\StoreCompanyRequest;
 use App\Http\Requests\UpdateCompanyRequest;
 use App\Models\Company;
+use App\Services\CompanyService;
 use Illuminate\Http\RedirectResponse;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class CompanyController extends Controller
 {
-    public function index(): Response
-    {
-        $companies = Company::query()
-            ->withCount(['sentShipments', 'receivedShipments'])
-            ->orderBy('company_name')
-            ->paginate(10);
-
+    public function index(
+        CompanyService $companyService
+    ): Response {
         return Inertia::render('companies/index', [
-            'companies' => $companies,
+            'companies' => $companyService->getPaginatedCompanies(),
         ]);
     }
 
@@ -29,20 +26,22 @@ class CompanyController extends Controller
     }
 
     public function store(
-        StoreCompanyRequest $request
+        StoreCompanyRequest $request,
+        CompanyService $companyService
     ): RedirectResponse {
-        Company::create($request->validated());
+        $companyService->create($request->validated());
 
         return to_route('companies.index')
             ->with('success', 'Company added successfully.');
     }
 
-    public function show(Company $company): Response
-    {
-        $company->loadCount(['sentShipments', 'receivedShipments']);
-
+    public function show(
+        Company $company,
+        CompanyService $companyService
+    ): Response {
         return Inertia::render('companies/show', [
-            'company' => $company,
+            'company' => $companyService
+                ->getCompanyWithShipmentCounts($company),
         ]);
     }
 
@@ -55,28 +54,23 @@ class CompanyController extends Controller
 
     public function update(
         UpdateCompanyRequest $request,
-        Company $company
+        Company $company,
+        CompanyService $companyService
     ): RedirectResponse {
-        $company->update($request->validated());
+        $companyService->update(
+            $company,
+            $request->validated()
+        );
 
         return to_route('companies.index')
             ->with('success', 'Company updated successfully.');
     }
 
-    public function destroy(Company $company): RedirectResponse
-    {
-        if (
-            $company->sentShipments()->exists() ||
-            $company->receivedShipments()->exists()
-        ) {
-            return to_route('companies.index')
-                ->with(
-                    'error',
-                    'This company cannot be deleted because it is linked to existing shipments.'
-                );
-        }
-
-        $company->delete();
+    public function destroy(
+        Company $company,
+        CompanyService $companyService
+    ): RedirectResponse {
+        $companyService->delete($company);
 
         return to_route('companies.index')
             ->with('success', 'Company deleted successfully.');

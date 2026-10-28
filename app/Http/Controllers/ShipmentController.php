@@ -162,11 +162,16 @@ if (
             ->with('success', 'Shipment updated successfully.');
     }
 
-    public function destroy(Shipment $shipment): RedirectResponse
-    {
-        $shipment->delete();
+    
+public function destroy(
+    Shipment $shipment,
+    ShipmentService $shipmentService
+) {
+    $shipmentService->delete($shipment);
 
-        return to_route('shipments.index')
-            ->with('success', 'Shipment deleted successfully.');
-    }
+    return redirect()
+        ->route('shipments.index')
+        ->with('success', 'Shipment deleted successfully.');
+}
+
 }
