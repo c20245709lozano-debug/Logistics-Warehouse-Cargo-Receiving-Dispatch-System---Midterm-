@@ -13,10 +13,15 @@ use Inertia\Response;
 
 class ShipmentController extends Controller
 {
-    public function index(
-        Request $request,
-        ShipmentService $shipmentService
-    ): Response {
+    protected ShipmentService $shipmentService;
+
+    public function __construct(ShipmentService $shipmentService)
+    {
+        $this->shipmentService = $shipmentService;
+    }
+
+    public function index(Request $request): Response
+    {
         $search = trim((string) $request->query('search', ''));
         $status = (string) $request->query('status', 'all');
         $arrivalDate = (string) $request->query('arrival_date', '');
@@ -32,7 +37,7 @@ class ShipmentController extends Controller
             $arrivalDate = '';
         }
 
-        $shipments = $shipmentService->getPaginatedShipments([
+        $shipments = $this->shipmentService->getPaginatedShipments([
             'search' => $search,
             'status' => $status,
             'arrival_date' => $arrivalDate,
@@ -48,61 +53,48 @@ class ShipmentController extends Controller
         ]);
     }
 
-    public function create(ShipmentService $shipmentService): Response
+    public function create(): Response
     {
         return Inertia::render(
             'shipments/create',
-            $shipmentService->getFormDependencies()
+            $this->shipmentService->getFormDependencies()
         );
     }
 
-    public function store(
-        StoreShipmentRequest $request,
-        ShipmentService $shipmentService
-    ): RedirectResponse {
-        $shipmentService->create($request->validated());
+    public function store(StoreShipmentRequest $request): RedirectResponse
+    {
+        $this->shipmentService->create($request->validated());
 
         return to_route('shipments.index')
             ->with('success', 'Shipment created successfully.');
     }
 
-    public function show(
-        Shipment $shipment,
-        ShipmentService $shipmentService
-    ): Response {
+    public function show(Shipment $shipment): Response
+    {
         return Inertia::render('shipments/show', [
-            'shipment' => $shipmentService
-                ->getShipmentWithRelations($shipment),
+            'shipment' => $this->shipmentService->getShipmentWithRelations($shipment),
         ]);
     }
 
-    public function edit(
-        Shipment $shipment,
-        ShipmentService $shipmentService
-    ): Response {
+    public function edit(Shipment $shipment): Response
+    {
         return Inertia::render('shipments/edit', [
-            'shipment' => $shipmentService
-                ->getShipmentWithRelations($shipment),
-            ...$shipmentService->getFormDependencies(),
+            'shipment' => $this->shipmentService->getShipmentWithRelations($shipment),
+            ...$this->shipmentService->getFormDependencies(),
         ]);
     }
 
-    public function update(
-        UpdateShipmentRequest $request,
-        Shipment $shipment,
-        ShipmentService $shipmentService
-    ): RedirectResponse {
-        $shipmentService->update($shipment, $request->validated());
+    public function update(UpdateShipmentRequest $request, Shipment $shipment): RedirectResponse
+    {
+        $this->shipmentService->update($shipment, $request->validated());
 
         return to_route('shipments.index')
             ->with('success', 'Shipment updated successfully.');
     }
 
-    public function destroy(
-        Shipment $shipment,
-        ShipmentService $shipmentService
-    ): RedirectResponse {
-        $shipmentService->delete($shipment);
+    public function destroy(Shipment $shipment): RedirectResponse
+    {
+        $this->shipmentService->delete($shipment);
 
         return to_route('shipments.index')
             ->with('success', 'Shipment deleted successfully.');
