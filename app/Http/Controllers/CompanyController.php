@@ -12,11 +12,17 @@ use Inertia\Response;
 
 class CompanyController extends Controller
 {
-    public function index(
-        CompanyService $companyService
-    ): Response {
+    protected CompanyService $companyService;
+
+    public function __construct(CompanyService $companyService)
+    {
+        $this->companyService = $companyService;
+    }
+
+    public function index(): Response
+    {
         return Inertia::render('companies/index', [
-            'companies' => $companyService->getPaginatedCompanies(),
+            'companies' => $this->companyService->getPaginatedCompanies(),
         ]);
     }
 
@@ -25,23 +31,16 @@ class CompanyController extends Controller
         return Inertia::render('companies/create');
     }
 
-    public function store(
-        StoreCompanyRequest $request,
-        CompanyService $companyService
-    ): RedirectResponse {
-        $companyService->create($request->validated());
-
-        return to_route('companies.index')
-            ->with('success', 'Company added successfully.');
+    public function store(StoreCompanyRequest $request): RedirectResponse
+    {
+        $this->companyService->create($request->validated());
+        return to_route('companies.index')->with('success', 'Company added successfully.');
     }
 
-    public function show(
-        Company $company,
-        CompanyService $companyService
-    ): Response {
+    public function show(Company $company): Response
+    {
         return Inertia::render('companies/show', [
-            'company' => $companyService
-                ->getCompanyWithShipmentCounts($company),
+            'company' => $this->companyService->getCompanyWithShipmentCounts($company),
         ]);
     }
 
@@ -52,27 +51,15 @@ class CompanyController extends Controller
         ]);
     }
 
-    public function update(
-        UpdateCompanyRequest $request,
-        Company $company,
-        CompanyService $companyService
-    ): RedirectResponse {
-        $companyService->update(
-            $company,
-            $request->validated()
-        );
-
-        return to_route('companies.index')
-            ->with('success', 'Company updated successfully.');
+    public function update(UpdateCompanyRequest $request, Company $company): RedirectResponse
+    {
+        $this->companyService->update($company, $request->validated());
+        return to_route('companies.index')->with('success', 'Company updated successfully.');
     }
 
-    public function destroy(
-        Company $company,
-        CompanyService $companyService
-    ): RedirectResponse {
-        $companyService->delete($company);
-
-        return to_route('companies.index')
-            ->with('success', 'Company deleted successfully.');
+    public function destroy(Company $company): RedirectResponse
+    {
+        $this->companyService->delete($company);
+        return to_route('companies.index')->with('success', 'Company deleted successfully.');
     }
 }

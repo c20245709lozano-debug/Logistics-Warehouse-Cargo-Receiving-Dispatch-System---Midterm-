@@ -22,7 +22,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::resource('cargo-categories', CargoCategoryController::class);
     Route::resource('warehouse-bays', WarehouseBayController::class);
     Route::resource('shipments', ShipmentController::class);
-    Route::resource('billing-statements', BillingStatementController::class);
+   Route::resource('billing-statements', BillingStatementController::class)
+    ->only(['index', 'show']);
 });
 
 require __DIR__.'/settings.php';

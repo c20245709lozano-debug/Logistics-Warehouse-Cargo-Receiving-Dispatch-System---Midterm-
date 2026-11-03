@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Company;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class CompanyService
@@ -22,26 +23,31 @@ class CompanyService
 
     public function create(array $data): Company
     {
-        return Company::create($this->sanitizeData($data));
+        return DB::transaction(function () use ($data) {
+            return Company::create($this->sanitizeData($data));
+        });
     }
 
     public function update(Company $company, array $data): Company
     {
-        $company->update($this->sanitizeData($data));
-
-        return $company->refresh();
+        return DB::transaction(function () use ($company, $data) {
+            $company->update($this->sanitizeData($data));
+            return $company->refresh();
+        });
     }
 
     public function delete(Company $company): bool
     {
-        if ($company->sentShipments()->exists() ||
-            $company->receivedShipments()->exists()) {
-            throw ValidationException::withMessages([
-                'company' => 'This company cannot be deleted because it has shipment records.',
-            ]);
-        }
+        return DB::transaction(function () use ($company) {
+            if ($company->sentShipments()->exists() ||
+                $company->receivedShipments()->exists()) {
+                throw ValidationException::withMessages([
+                    'company' => 'This company cannot be deleted because it has shipment records.',
+                ]);
+            }
 
-        return $company->delete();
+            return $company->delete();
+        });
     }
 
     private function sanitizeData(array $data): array
