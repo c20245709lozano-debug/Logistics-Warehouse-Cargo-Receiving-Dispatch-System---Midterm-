@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Carbon\Carbon;
 
- @see \App\Models\Shipment
+
 
 class ShipmentService
 {

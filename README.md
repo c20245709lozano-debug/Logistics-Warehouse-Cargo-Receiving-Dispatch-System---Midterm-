@@ -1,116 +1,98 @@
-## System Architecture
-
-```mermaid
 flowchart TD
-    User(("User"))
-    Routes["Web Routes<br/>[routes/web.php]"]
-
-    User --> Routes
+    User([User])
+    Routes["Routes<br/>routes/web.php"]
 
     subgraph Controllers["Controller Layer"]
-        CompanyController["Company Controller<br/>[CompanyController.php]"]
-        CategoryController["Cargo Category Controller<br/>[CargoCategoryController.php]"]
-        BayController["Warehouse Bay Controller<br/>[WarehouseBayController.php]"]
-        ShipmentController["Shipment Controller<br/>[ShipmentController.php]"]
-        BillingController["Billing Statement Controller<br/>[BillingStatementController.php]"]
-        DashboardController["Dashboard Controller<br/>[DashboardController.php]"]
+        CC["CompanyController.php"]
+        CCC["CargoCategoryController.php"]
+        WBC["WarehouseBayController.php"]
+        SC["ShipmentController.php"]
+        BSC["BillingStatementController.php"]
+        DC["DashboardController.php"]
     end
 
-    Routes --> CompanyController
-    Routes --> CategoryController
-    Routes --> BayController
-    Routes --> ShipmentController
-    Routes --> BillingController
-    Routes --> DashboardController
-
-    subgraph FormRequests["Form Request Validation Layer"]
-        StoreCompanyRequest["Store Company Request<br/>[StoreCompanyRequest.php]"]
-        UpdateCompanyRequest["Update Company Request<br/>[UpdateCompanyRequest.php]"]
-        StoreCategoryRequest["Store Cargo Category Request<br/>[StoreCargoCategoryRequest.php]"]
-        UpdateCategoryRequest["Update Cargo Category Request<br/>[UpdateCargoCategoryRequest.php]"]
-        StoreBayRequest["Store Warehouse Bay Request<br/>[StoreWarehouseBayRequest.php]"]
-        UpdateBayRequest["Update Warehouse Bay Request<br/>[UpdateWarehouseBayRequest.php]"]
-        StoreShipmentRequest["Store Shipment Request<br/>[StoreShipmentRequest.php]"]
-        UpdateShipmentRequest["Update Shipment Request<br/>[UpdateShipmentRequest.php]"]
+    subgraph Requests["Form Request Validation Layer"]
+        SCR["StoreCompanyRequest.php"]
+        UCR["UpdateCompanyRequest.php"]
+        SCCR["StoreCargoCategoryRequest.php"]
+        UCCR["UpdateCargoCategoryRequest.php"]
+        SWBR["StoreWarehouseBayRequest.php"]
+        UWBR["UpdateWarehouseBayRequest.php"]
+        SSR["StoreShipmentRequest.php"]
+        USR["UpdateShipmentRequest.php"]
     end
-
-    CompanyController --> StoreCompanyRequest
-    CompanyController --> UpdateCompanyRequest
-    CategoryController --> StoreCategoryRequest
-    CategoryController --> UpdateCategoryRequest
-    BayController --> StoreBayRequest
-    BayController --> UpdateBayRequest
-    ShipmentController --> StoreShipmentRequest
-    ShipmentController --> UpdateShipmentRequest
 
     subgraph Services["Service Layer"]
-        CompanyService["Company Service<br/>[CompanyService.php]"]
-        CategoryService["Cargo Category Service<br/>[CargoCategoryService.php]"]
-        BayService["Warehouse Bay Service<br/>[WarehouseBayService.php]"]
-        ShipmentService["Shipment Service<br/>[ShipmentService.php]"]
-        BillingService["Billing Statement Service<br/>[BillingStatementService.php]"]
-        DashboardService["Dashboard Service<br/>[DashboardService.php]"]
+        CS["CompanyService.php"]
+        CCS["CargoCategoryService.php"]
+        WBS["WarehouseBayService.php"]
+        SS["ShipmentService.php"]
+        BSS["BillingStatementService.php"]
+        DS["DashboardService.php"]
     end
-
-    CompanyController --> CompanyService
-    CategoryController --> CategoryService
-    BayController --> BayService
-    ShipmentController --> ShipmentService
-    BillingController --> BillingService
-    DashboardController --> DashboardService
 
     subgraph Models["Eloquent Model Layer"]
-        CompanyModel["Company Model<br/>[Company.php]"]
-        CategoryModel["Cargo Category Model<br/>[CargoCategory.php]"]
-        BayModel["Warehouse Bay Model<br/>[WarehouseBay.php]"]
-        ShipmentModel["Shipment Model<br/>[Shipment.php]"]
-        BillingModel["Billing Statement Model<br/>[BillingStatement.php]"]
+        Company["Company.php"]
+        CargoCategory["CargoCategory.php"]
+        WarehouseBay["WarehouseBay.php"]
+        Shipment["Shipment.php"]
+        BillingStatement["BillingStatement.php"]
     end
 
-    CompanyService --> CompanyModel
-    CategoryService --> CategoryModel
-    BayService --> BayModel
-    ShipmentService --> ShipmentModel
-    BillingService --> BillingModel
-
-    DashboardService --> ShipmentModel
-    DashboardService --> CompanyModel
-    DashboardService --> CategoryModel
-    DashboardService --> BayModel
-    DashboardService --> BillingModel
-
-    ShipmentModel --> CompanyModel
-    ShipmentModel --> CategoryModel
-    ShipmentModel --> BayModel
-    BillingModel --> ShipmentModel
-
-    subgraph Database["MySQL / MariaDB"]
-        CompaniesTable[("companies")]
-        CategoriesTable[("cargo_categories")]
-        BaysTable[("warehouse_bays")]
-        ShipmentsTable[("shipments")]
-        BillingTable[("billing_statements")]
+    subgraph Database["MySQL / MariaDB Database"]
+        Companies[("companies")]
+        Categories[("cargo_categories")]
+        Bays[("warehouse_bays")]
+        Shipments[("shipments")]
+        Statements[("billing_statements")]
     end
 
-    CompanyModel --> CompaniesTable
-    CategoryModel --> CategoriesTable
-    BayModel --> BaysTable
-    ShipmentModel --> ShipmentsTable
-    BillingModel --> BillingTable
+    User --> Routes
+    Routes --> CC
+    Routes --> CCC
+    Routes --> WBC
+    Routes --> SC
+    Routes --> BSC
+    Routes --> DC
 
-    subgraph Frontend["Inertia and React"]
-        ReactApp["React Application<br/>[resources/js/app.tsx]"]
-        InertiaPages["Inertia Pages<br/>[resources/js/pages/]"]
-        InertiaMiddleware["Inertia Middleware<br/>[HandleInertiaRequests.php]"]
-    end
+    SCR --> CC
+    UCR --> CC
+    SCCR --> CCC
+    UCCR --> CCC
+    SWBR --> WBC
+    UWBR --> WBC
+    SSR --> SC
+    USR --> SC
 
-    CompanyController --> InertiaPages
-    CategoryController --> InertiaPages
-    BayController --> InertiaPages
-    ShipmentController --> InertiaPages
-    BillingController --> InertiaPages
-    DashboardController --> InertiaPages
+    CC --> CS
+    CCC --> CCS
+    WBC --> WBS
+    SC --> SS
+    BSC --> BSS
+    DC --> DS
 
-    ReactApp --> InertiaPages
-    InertiaMiddleware -.-> ReactApp
-```
+    CS --> Company
+    CCS --> CargoCategory
+    WBS --> WarehouseBay
+    SS --> Shipment
+    SS --> WarehouseBay
+    SS --> BillingStatement
+    BSS --> BillingStatement
+    BSS --> Shipment
+    DS --> Shipment
+    DS --> Company
+    DS --> CargoCategory
+    DS --> WarehouseBay
+    DS --> BillingStatement
+
+    Company --> Companies
+    CargoCategory --> Categories
+    WarehouseBay --> Bays
+    Shipment --> Shipments
+    BillingStatement --> Statements
+
+    Shipment -->|sender / receiver| Company
+    Shipment --> CargoCategory
+    Shipment --> WarehouseBay
+    Shipment --> BillingStatement
+    BillingStatement --> Shipment
