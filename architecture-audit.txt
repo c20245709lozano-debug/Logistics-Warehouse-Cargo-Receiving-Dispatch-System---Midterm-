@@ -1,0 +1,1266 @@
+﻿LWCRDS Architecture Code Audit
+Project: C:\ProgramData\envkit\projects\lwcrds-app
+========================================
+
+
+========== routes\web.php ==========
+<?php
+
+use Illuminate\Support\Facades\Route;
+use Inertia\Inertia;
+
+use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\CompanyController;
+use App\Http\Controllers\CargoCategoryController;
+use App\Http\Controllers\WarehouseBayController;
+use App\Http\Controllers\ShipmentController;
+use App\Http\Controllers\BillingStatementController;
+
+Route::get('/', function () {
+    return Inertia::render('welcome');
+})->name('home');
+
+Route::middleware(['auth', 'verified'])->group(function () {
+    Route::get('/dashboard', [DashboardController::class, 'index'])
+        ->name('dashboard');
+
+    Route::resource('companies', CompanyController::class);
+    Route::resource('cargo-categories', CargoCategoryController::class);
+    Route::resource('warehouse-bays', WarehouseBayController::class);
+    Route::resource('shipments', ShipmentController::class);
+   Route::resource('billing-statements', BillingStatementController::class)
+    ->only(['index', 'show']);
+});
+
+require __DIR__.'/settings.php';
+require __DIR__.'/auth.php';
+
+
+========== app\Http\Controllers\CompanyController.php ==========
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Http\Requests\StoreCompanyRequest;
+use App\Http\Requests\UpdateCompanyRequest;
+use App\Models\Company;
+use App\Services\CompanyService;
+use Illuminate\Http\RedirectResponse;
+use Inertia\Inertia;
+use Inertia\Response;
+
+class CompanyController extends Controller
+{
+    protected CompanyService $companyService;
+
+    public function __construct(CompanyService $companyService)
+    {
+        $this->companyService = $companyService;
+    }
+
+    public function index(): Response
+    {
+        return Inertia::render('companies/index', [
+            'companies' => $this->companyService->getPaginatedCompanies(),
+        ]);
+    }
+
+    public function create(): Response
+    {
+        return Inertia::render('companies/create');
+    }
+
+    public function store(StoreCompanyRequest $request): RedirectResponse
+    {
+        $this->companyService->create($request->validated());
+        return to_route('companies.index')->with('success', 'Company added successfully.');
+    }
+
+    public function show(Company $company): Response
+    {
+        return Inertia::render('companies/show', [
+            'company' => $this->companyService->getCompanyWithShipmentCounts($company),
+        ]);
+    }
+
+    public function edit(Company $company): Response
+    {
+        return Inertia::render('companies/edit', [
+            'company' => $company,
+        ]);
+    }
+
+    public function update(UpdateCompanyRequest $request, Company $company): RedirectResponse
+    {
+        $this->companyService->update($company, $request->validated());
+        return to_route('companies.index')->with('success', 'Company updated successfully.');
+    }
+
+    public function destroy(Company $company): RedirectResponse
+    {
+        $this->companyService->delete($company);
+        return to_route('companies.index')->with('success', 'Company deleted successfully.');
+    }
+}
+
+========== app\Http\Controllers\CargoCategoryController.php ==========
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Http\Requests\StoreCargoCategoryRequest;
+use App\Http\Requests\UpdateCargoCategoryRequest;
+use App\Models\CargoCategory;
+use App\Services\CargoCategoryService;
+use Illuminate\Http\RedirectResponse;
+use Inertia\Inertia;
+use Inertia\Response;
+
+class CargoCategoryController extends Controller
+{
+    public function index(
+        CargoCategoryService $cargoCategoryService
+    ): Response {
+        return Inertia::render('cargo-categories/index', [
+            'categories' => $cargoCategoryService
+                ->getPaginatedCategories(),
+        ]);
+    }
+
+    public function create(): Response
+    {
+        return Inertia::render('cargo-categories/create');
+    }
+
+    public function store(
+        StoreCargoCategoryRequest $request,
+        CargoCategoryService $cargoCategoryService
+    ): RedirectResponse {
+        $cargoCategoryService->create($request->validated());
+
+        return to_route('cargo-categories.index')
+            ->with('success', 'Cargo category added successfully.');
+    }
+
+    public function show(
+        CargoCategory $cargoCategory,
+        CargoCategoryService $cargoCategoryService
+    ): Response {
+        return Inertia::render('cargo-categories/show', [
+            'category' => $cargoCategoryService
+                ->getCategoryWithShipmentCount($cargoCategory),
+        ]);
+    }
+
+    public function edit(CargoCategory $cargoCategory): Response
+    {
+        return Inertia::render('cargo-categories/edit', [
+            'category' => $cargoCategory,
+        ]);
+    }
+
+    public function update(
+        UpdateCargoCategoryRequest $request,
+        CargoCategory $cargoCategory,
+        CargoCategoryService $cargoCategoryService
+    ): RedirectResponse {
+        $cargoCategoryService->update(
+            $cargoCategory,
+            $request->validated()
+        );
+
+        return to_route('cargo-categories.index')
+            ->with('success', 'Cargo category updated successfully.');
+    }
+
+    public function destroy(
+        CargoCategory $cargoCategory,
+        CargoCategoryService $cargoCategoryService
+    ): RedirectResponse {
+        $deleted = $cargoCategoryService->delete($cargoCategory);
+
+        if (! $deleted) {
+            return to_route('cargo-categories.index')
+                ->with(
+                    'error',
+                    'This category cannot be deleted because it is linked to existing shipments.'
+                );
+        }
+
+        return to_route('cargo-categories.index')
+            ->with('success', 'Cargo category deleted successfully.');
+    }
+}
+
+
+========== app\Http\Controllers\WarehouseBayController.php ==========
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Http\Requests\StoreWarehouseBayRequest;
+use App\Http\Requests\UpdateWarehouseBayRequest;
+use App\Models\WarehouseBay;
+use App\Services\WarehouseBayService;
+use Illuminate\Http\RedirectResponse;
+use Inertia\Inertia;
+use Inertia\Response;
+
+class WarehouseBayController extends Controller
+{
+    protected WarehouseBayService $warehouseBayService;
+
+    public function __construct(WarehouseBayService $warehouseBayService)
+    {
+        $this->warehouseBayService = $warehouseBayService;
+    }
+
+    public function index(): Response
+    {
+        return Inertia::render('warehouse-bays/index', [
+            'bays' => $this->warehouseBayService->getPaginatedBays(),
+        ]);
+    }
+
+    public function create(): Response
+    {
+        return Inertia::render('warehouse-bays/create');
+    }
+
+    public function store(StoreWarehouseBayRequest $request): RedirectResponse
+    {
+        $this->warehouseBayService->create($request->validated());
+
+        return to_route('warehouse-bays.index')
+            ->with('success', 'Warehouse bay created successfully.');
+    }
+
+    public function show(WarehouseBay $warehouseBay): Response
+    {
+        return Inertia::render('warehouse-bays/show', [
+            'bay' => $this->warehouseBayService->getBayWithShipments($warehouseBay),
+        ]);
+    }
+
+    public function edit(WarehouseBay $warehouseBay): Response
+    {
+        return Inertia::render('warehouse-bays/edit', [
+            'bay' => $warehouseBay,
+        ]);
+    }
+
+    public function update(UpdateWarehouseBayRequest $request, WarehouseBay $warehouseBay): RedirectResponse
+    {
+        $this->warehouseBayService->update(
+            $warehouseBay,
+            $request->validated()
+        );
+
+        return to_route('warehouse-bays.index')
+            ->with('success', 'Warehouse bay updated successfully.');
+    }
+
+    public function destroy(WarehouseBay $warehouseBay): RedirectResponse
+    {
+        $deleted = $this->warehouseBayService->delete($warehouseBay);
+
+        if (! $deleted) {
+            return to_route('warehouse-bays.index')
+                ->with(
+                    'error',
+                    'This bay cannot be deleted because shipments are assigned to it.'
+                );
+        }
+
+        return to_route('warehouse-bays.index')
+            ->with('success', 'Warehouse bay deleted successfully.');
+    }
+}
+
+========== app\Http\Controllers\ShipmentController.php ==========
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Http\Requests\StoreShipmentRequest;
+use App\Http\Requests\UpdateShipmentRequest;
+use App\Models\Shipment;
+use App\Services\ShipmentService;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Inertia\Inertia;
+use Inertia\Response;
+
+class ShipmentController extends Controller
+{
+    protected ShipmentService $shipmentService;
+
+    public function __construct(ShipmentService $shipmentService)
+    {
+        $this->shipmentService = $shipmentService;
+    }
+
+    public function index(Request $request): Response
+    {
+        $search = trim((string) $request->query('search', ''));
+        $status = (string) $request->query('status', 'all');
+        $arrivalDate = (string) $request->query('arrival_date', '');
+
+        if (! in_array($status, ['all', 'stored', 'dispatched'], true)) {
+            $status = 'all';
+        }
+
+        if (
+            $arrivalDate !== ''
+            && ! preg_match('/^\d{4}-\d{2}-\d{2}$/', $arrivalDate)
+        ) {
+            $arrivalDate = '';
+        }
+
+        $shipments = $this->shipmentService->getPaginatedShipments([
+            'search' => $search,
+            'status' => $status,
+            'arrival_date' => $arrivalDate,
+        ]);
+
+        return Inertia::render('shipments/index', [
+            'shipments' => $shipments,
+            'filters' => [
+                'search' => $search,
+                'status' => $status,
+                'arrival_date' => $arrivalDate,
+            ],
+        ]);
+    }
+
+    public function create(): Response
+    {
+        return Inertia::render(
+            'shipments/create',
+            $this->shipmentService->getFormDependencies()
+        );
+    }
+
+    public function store(StoreShipmentRequest $request): RedirectResponse
+    {
+        $this->shipmentService->create($request->validated());
+
+        return to_route('shipments.index')
+            ->with('success', 'Shipment created successfully.');
+    }
+
+    public function show(Shipment $shipment): Response
+    {
+        return Inertia::render('shipments/show', [
+            'shipment' => $this->shipmentService->getShipmentWithRelations($shipment),
+        ]);
+    }
+
+    public function edit(Shipment $shipment): Response
+    {
+        return Inertia::render('shipments/edit', [
+            'shipment' => $this->shipmentService->getShipmentWithRelations($shipment),
+            ...$this->shipmentService->getFormDependencies(),
+        ]);
+    }
+
+    public function update(UpdateShipmentRequest $request, Shipment $shipment): RedirectResponse
+    {
+        $this->shipmentService->update($shipment, $request->validated());
+
+        return to_route('shipments.index')
+            ->with('success', 'Shipment updated successfully.');
+    }
+
+    public function destroy(Shipment $shipment): RedirectResponse
+    {
+        $this->shipmentService->delete($shipment);
+
+        return to_route('shipments.index')
+            ->with('success', 'Shipment deleted successfully.');
+    }
+}
+
+========== app\Http\Controllers\BillingStatementController.php ==========
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\BillingStatement;
+use App\Services\BillingStatementService;
+use Inertia\Inertia;
+use Inertia\Response;
+
+class BillingStatementController extends Controller
+{
+    public function __construct(
+        private BillingStatementService $billingStatementService
+    ) {}
+
+    public function index(): Response
+    {
+        return Inertia::render('billing-statements/index', [
+            'statements' => $this->billingStatementService
+                ->getPaginatedStatements(),
+        ]);
+    }
+
+    public function show(BillingStatement $billingStatement): Response
+    {
+        return Inertia::render('billing-statements/show', [
+            'billingStatement' => $this->billingStatementService
+                ->getStatementWithShipment($billingStatement),
+        ]);
+    }
+}
+
+========== app\Http\Controllers\DashboardController.php ==========
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Services\DashboardService;
+use Inertia\Inertia;
+use Inertia\Response;
+
+class DashboardController extends Controller
+{
+    public function __construct(
+        private DashboardService $dashboardService
+    ) {}
+
+    public function index(): Response
+    {
+        return Inertia::render(
+            'dashboard',
+            $this->dashboardService->getSummary()
+        );
+    }
+}
+
+========== app\Services\CompanyService.php ==========
+<?php
+
+namespace App\Services;
+
+use App\Models\Company;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
+
+class CompanyService
+{
+    public function getPaginatedCompanies(): LengthAwarePaginator
+    {
+        return Company::withCount(['sentShipments', 'receivedShipments'])
+            ->orderBy('company_name')
+            ->paginate(10);
+    }
+
+    public function getCompanyWithShipmentCounts(Company $company): Company
+    {
+        return $company->loadCount(['sentShipments', 'receivedShipments']);
+    }
+
+    public function create(array $data): Company
+    {
+        return DB::transaction(function () use ($data) {
+            return Company::create($this->sanitizeData($data));
+        });
+    }
+
+    public function update(Company $company, array $data): Company
+    {
+        return DB::transaction(function () use ($company, $data) {
+            $company->update($this->sanitizeData($data));
+            return $company->refresh();
+        });
+    }
+
+    public function delete(Company $company): bool
+    {
+        return DB::transaction(function () use ($company) {
+            if ($company->sentShipments()->exists() ||
+                $company->receivedShipments()->exists()) {
+                throw ValidationException::withMessages([
+                    'company' => 'This company cannot be deleted because it has shipment records.',
+                ]);
+            }
+
+            return $company->delete();
+        });
+    }
+
+    private function sanitizeData(array $data): array
+    {
+        if (array_key_exists('company_name', $data)) {
+            $name = strip_tags((string) $data['company_name']);
+            $name = preg_replace('/\s+/u', ' ', $name) ?? $name;
+            $data['company_name'] = trim($name);
+
+            if ($data['company_name'] === '') {
+                throw ValidationException::withMessages([
+                    'company_name' => 'The company name is required.',
+                ]);
+            }
+        }
+
+        return $data;
+    }
+}
+
+========== app\Services\CargoCategoryService.php ==========
+<?php
+
+namespace App\Services;
+
+use App\Models\CargoCategory;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Validation\ValidationException;
+
+class CargoCategoryService
+{
+    public function getPaginatedCategories(): LengthAwarePaginator
+    {
+        return CargoCategory::withCount('shipments')
+            ->orderBy('category_name')
+            ->paginate(10);
+    }
+
+    public function getCategoryWithShipmentCount(
+        CargoCategory $category
+    ): CargoCategory {
+        return $category->loadCount('shipments');
+    }
+
+    public function create(array $data): CargoCategory
+    {
+        return CargoCategory::create($this->sanitizeData($data));
+    }
+
+    public function update(
+        CargoCategory $category,
+        array $data
+    ): CargoCategory {
+        $category->update($this->sanitizeData($data));
+
+        return $category->refresh();
+    }
+
+    public function delete(CargoCategory $category): bool
+    {
+        if ($category->shipments()->exists()) {
+            return false;
+        }
+
+        return $category->delete();
+    }
+
+    private function sanitizeData(array $data): array
+    {
+        if (array_key_exists('category_name', $data)) {
+            $name = strip_tags((string) $data['category_name']);
+            $name = preg_replace('/\s+/u', ' ', $name) ?? $name;
+            $data['category_name'] = trim($name);
+
+            if ($data['category_name'] === '') {
+                throw ValidationException::withMessages([
+                    'category_name' => 'The category name is required.',
+                ]);
+            }
+        }
+
+        if (array_key_exists('daily_storage_rate', $data)) {
+            if (! is_numeric($data['daily_storage_rate'])) {
+                throw ValidationException::withMessages([
+                    'daily_storage_rate' => 'The storage rate must be numeric.',
+                ]);
+            }
+
+            $data['daily_storage_rate'] = number_format(
+                (float) $data['daily_storage_rate'],
+                2,
+                '.',
+                ''
+            );
+        }
+
+        return $data;
+    }
+}
+
+========== app\Services\WarehouseBayService.php ==========
+<?php
+
+namespace App\Services;
+
+use App\Models\WarehouseBay;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
+
+class WarehouseBayService
+{
+    public function getPaginatedBays(): LengthAwarePaginator
+    {
+        return WarehouseBay::withCount([
+            'shipments as occupied_shipments_count' => function ($query) {
+                $query->where(function ($activeQuery) {
+                    $activeQuery->whereNull('dispatch_date')
+                        ->orWhereDate('dispatch_date', '>', today());
+                });
+            },
+        ])
+            ->orderBy('bay_code')
+            ->paginate(10);
+    }
+
+    public function getBayWithShipments(WarehouseBay $bay): WarehouseBay
+    {
+        return $bay->load([
+            'shipments.sender',
+            'shipments.receiver',
+            'shipments.cargoCategory',
+        ]);
+    }
+
+    public function create(array $data): WarehouseBay
+    {
+        return WarehouseBay::create($this->sanitizeData($data));
+    }
+
+    public function update(
+        WarehouseBay $bay,
+        array $data
+    ): WarehouseBay {
+        $data = $this->sanitizeData($data);
+
+        return DB::transaction(function () use ($bay, $data) {
+            $bay = WarehouseBay::whereKey($bay->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $activeShipments = $bay->shipments()
+                ->where(function ($query) {
+                    $query->whereNull('dispatch_date')
+                        ->orWhereDate('dispatch_date', '>', today());
+                })
+                ->get();
+
+            $currentWeight = (float) $activeShipments->sum('weight_kg');
+            $currentVolume = (float) $activeShipments->sum('volume_cbm');
+
+            $newMaxWeight = array_key_exists('max_weight_kg', $data)
+                ? (float) $data['max_weight_kg']
+                : (float) $bay->max_weight_kg;
+
+            $newMaxVolume = array_key_exists('max_volume_cbm', $data)
+                ? (float) $data['max_volume_cbm']
+                : (float) $bay->max_volume_cbm;
+
+            if ($currentWeight > $newMaxWeight ||
+                $currentVolume > $newMaxVolume) {
+                throw ValidationException::withMessages([
+                    'capacity' => 'The new bay capacity cannot be lower than its currently assigned cargo.',
+                ]);
+            }
+
+            $bay->update($data);
+
+            return $bay->refresh();
+        });
+    }
+
+    public function delete(WarehouseBay $bay): bool
+    {
+        return DB::transaction(function () use ($bay) {
+            $bay = WarehouseBay::whereKey($bay->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if ($bay->shipments()->exists()) {
+                return false;
+            }
+
+            return $bay->delete();
+        });
+    }
+
+    private function sanitizeData(array $data): array
+    {
+        if (array_key_exists('bay_code', $data)) {
+            $code = strip_tags((string) $data['bay_code']);
+            $code = preg_replace('/\s+/u', ' ', $code) ?? $code;
+
+            // Exam requirement: bay codes must be uppercase.
+            $data['bay_code'] = strtoupper(trim($code));
+
+            if ($data['bay_code'] === '') {
+                throw ValidationException::withMessages([
+                    'bay_code' => 'The bay code is required.',
+                ]);
+            }
+        }
+
+        foreach (['max_weight_kg', 'max_volume_cbm'] as $field) {
+            if (array_key_exists($field, $data)) {
+                if (! is_numeric($data[$field])) {
+                    throw ValidationException::withMessages([
+                        $field => 'This value must be numeric.',
+                    ]);
+                }
+
+                $data[$field] = number_format(
+                    (float) $data[$field],
+                    2,
+                    '.',
+                    ''
+                );
+            }
+        }
+
+        return $data;
+    }
+}
+
+========== app\Services\ShipmentService.php ==========
+<?php
+
+namespace App\Services;
+
+use App\Models\BillingStatement;
+use App\Models\Shipment;
+use App\Models\WarehouseBay;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
+use Carbon\Carbon;
+
+ @see \App\Models\Shipment
+
+class ShipmentService
+{
+    public function create(array $data): Shipment
+    {
+        return $this->saveShipment(new Shipment(), $data);
+    }
+
+    public function update(Shipment $shipment, array $data): Shipment
+    {
+        return $this->saveShipment($shipment, $data);
+    }
+
+    public function delete(Shipment $shipment): bool
+    {
+        return DB::transaction(function () use ($shipment) {
+            $shipment = Shipment::whereKey($shipment->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $shipment->billingStatement()->delete();
+
+            return $shipment->delete();
+        });
+    }
+
+    private function saveShipment(
+        Shipment $shipment,
+        array $data
+    ): Shipment {
+        $data = $this->sanitizeData($data);
+
+        return DB::transaction(function () use ($shipment, $data) {
+            $shippingFee = array_key_exists('shipping_fee', $data)
+                ? (float) $data['shipping_fee']
+                : (float) ($shipment->billingStatement?->shipping_fee ?? 0);
+
+            unset($data['shipping_fee']);
+
+            $bayId = $data['warehouse_bay_id']
+                ?? $shipment->warehouse_bay_id;
+
+            $bay = WarehouseBay::whereKey($bayId)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $activeShipments = Shipment::where('warehouse_bay_id', $bay->id)
+                ->where(function ($query) {
+                    $query->whereNull('dispatch_date')
+                        ->orWhereDate('dispatch_date', '>', today());
+                })
+                ->when($shipment->exists, function ($query) use ($shipment) {
+                    $query->where('id', '!=', $shipment->id);
+                })
+                ->get();
+
+            $currentWeight = (float) $activeShipments->sum('weight_kg');
+            $currentVolume = (float) $activeShipments->sum('volume_cbm');
+
+            $arrivalDate = Carbon::parse(
+                $data['arrival_date'] ?? $shipment->arrival_date
+            );
+
+            $dispatchDateValue = $data['dispatch_date']
+                ?? $shipment->dispatch_date;
+
+            $dispatchDate = $dispatchDateValue
+                ? Carbon::parse($dispatchDateValue)
+                : null;
+
+            $willOccupyBay = $dispatchDate === null ||
+                $dispatchDate->isAfter(today());
+
+            $newWeight = (float) (
+                $data['weight_kg'] ?? $shipment->weight_kg ?? 0
+            );
+
+            $newVolume = (float) (
+                $data['volume_cbm'] ?? $shipment->volume_cbm ?? 0
+            );
+
+            if ($willOccupyBay) {
+                if (($currentWeight + $newWeight) > (float) $bay->max_weight_kg) {
+                    throw ValidationException::withMessages([
+                        'weight_kg' => 'The selected warehouse bay does not have enough weight capacity.',
+                    ]);
+                }
+
+                if (($currentVolume + $newVolume) > (float) $bay->max_volume_cbm) {
+                    throw ValidationException::withMessages([
+                        'volume_cbm' => 'The selected warehouse bay does not have enough volume capacity.',
+                    ]);
+                }
+            }
+
+            $shipment->fill($data);
+            $shipment->save();
+
+            $storageEndDate = $dispatchDate ?? Carbon::today();
+
+            // Do not calculate negative storage duration for future arrivals.
+            $storageDays = $arrivalDate->greaterThan($storageEndDate)
+                ? 0
+                : $arrivalDate->diffInDays($storageEndDate) + 1;
+
+            $dailyRate = (float) $shipment->cargoCategory()
+                ->value('daily_storage_rate');
+
+            $storageFee = round($storageDays * $dailyRate, 2);
+            $totalCost = round($storageFee + $shippingFee, 2);
+
+            BillingStatement::updateOrCreate(
+                ['shipment_id' => $shipment->id],
+                [
+                    'storage_fee' => number_format($storageFee, 2, '.', ''),
+                    'shipping_fee' => number_format($shippingFee, 2, '.', ''),
+                    'total_cost' => number_format($totalCost, 2, '.', ''),
+                ]
+            );
+
+            return $shipment->load([
+                'sender',
+                'receiver',
+                'cargoCategory',
+                'warehouseBay',
+                'billingStatement',
+            ]);
+        });
+    }
+
+    private function sanitizeData(array $data): array
+    {
+        foreach ([
+            'sender_company_id',
+            'receiver_company_id',
+            'cargo_category_id',
+            'warehouse_bay_id',
+        ] as $field) {
+            if (array_key_exists($field, $data) && is_numeric($data[$field])) {
+                $data[$field] = (int) $data[$field];
+            }
+        }
+
+        foreach (['weight_kg', 'volume_cbm', 'shipping_fee'] as $field) {
+            if (array_key_exists($field, $data)) {
+                if (! is_numeric($data[$field])) {
+                    throw ValidationException::withMessages([
+                        $field => 'This value must be numeric.',
+                    ]);
+                }
+
+                $data[$field] = number_format(
+                    (float) $data[$field],
+                    2,
+                    '.',
+                    ''
+                );
+            }
+        }
+
+        return $data;
+    }
+    public function getPaginatedShipments(array $filters = [])
+{
+    $query = Shipment::query()->with([
+        'sender',
+        'receiver',
+        'cargoCategory',
+        'warehouseBay',
+        'billingStatement',
+    ]);
+
+    if (! empty($filters['search'])) {
+        $search = $filters['search'];
+
+        $query->where(function ($q) use ($search) {
+            if (ctype_digit($search)) {
+                $q->orWhere('id', (int) $search);
+            }
+
+            $q->orWhereHas('sender', fn ($c) =>
+                $c->where('company_name', 'like', "%{$search}%")
+            )->orWhereHas('receiver', fn ($c) =>
+                $c->where('company_name', 'like', "%{$search}%")
+            )->orWhereHas('cargoCategory', fn ($c) =>
+                $c->where('category_name', 'like', "%{$search}%")
+            );
+        });
+    }
+
+    if (($filters['status'] ?? 'all') === 'stored') {
+        $query->whereNull('dispatch_date');
+    } elseif (($filters['status'] ?? 'all') === 'dispatched') {
+        $query->whereNotNull('dispatch_date');
+    }
+
+    if (! empty($filters['arrival_date'])) {
+        $query->whereDate('arrival_date', $filters['arrival_date']);
+    }
+
+    return $query->latest()->paginate(10)->withQueryString();
+}
+
+public function getFormDependencies(): array
+{
+    return [
+        'companies' => \App\Models\Company::orderBy('company_name')->get(),
+        'categories' => \App\Models\CargoCategory::orderBy('category_name')->get(),
+        'bays' => \App\Models\WarehouseBay::orderBy('bay_code')->get(),
+    ];
+}
+
+public function getShipmentWithRelations(Shipment $shipment): Shipment
+{
+    return $shipment->load([
+        'sender',
+        'receiver',
+        'cargoCategory',
+        'warehouseBay',
+        'billingStatement',
+    ]);
+}
+}
+
+========== app\Services\BillingStatementService.php ==========
+<?php
+
+namespace App\Services;
+
+use App\Models\BillingStatement;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+
+class BillingStatementService
+{
+    private array $shipmentRelations = [
+        'shipment.sender',
+        'shipment.receiver',
+        'shipment.cargoCategory',
+        'shipment.warehouseBay',
+    ];
+
+    public function getPaginatedStatements(): LengthAwarePaginator
+    {
+        return BillingStatement::with($this->shipmentRelations)
+            ->latest()
+            ->paginate(10);
+    }
+
+    public function getStatementWithShipment(
+        BillingStatement $billingStatement
+    ): BillingStatement {
+        return $billingStatement->load($this->shipmentRelations);
+    }
+}
+
+========== app\Services\DashboardService.php ==========
+<?php
+
+namespace App\Services;
+
+use App\Models\BillingStatement;
+use App\Models\CargoCategory;
+use App\Models\Company;
+use App\Models\Shipment;
+use App\Models\WarehouseBay;
+
+class DashboardService
+{
+    public function getSummary(): array
+    {
+        return [
+            'totalShipments' => Shipment::count(),
+            'currentlyStored' => Shipment::whereNull('dispatch_date')->count(),
+            'dispatchedShipments' => Shipment::whereNotNull('dispatch_date')->count(),
+            'totalCompanies' => Company::count(),
+            'totalCargoCategories' => CargoCategory::count(),
+            'totalWarehouseBays' => WarehouseBay::count(),
+            'totalBilling' => BillingStatement::sum('total_cost'),
+        ];
+    }
+}
+
+
+========== app\Models\Company.php ==========
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+
+class Company extends Model
+{
+    use HasFactory;
+
+    protected $fillable = [
+        'company_name',
+    ];
+
+    public function sentShipments(): HasMany
+    {
+        return $this->hasMany(Shipment::class, 'sender_company_id');
+    }
+
+    public function receivedShipments(): HasMany
+    {
+        return $this->hasMany(Shipment::class, 'receiver_company_id');
+    }
+}
+
+
+========== app\Models\CargoCategory.php ==========
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+
+class CargoCategory extends Model
+{
+    use HasFactory;
+
+    protected $fillable = [
+        'category_name',
+        'daily_storage_rate',
+    ];
+
+    protected function casts(): array
+    {
+        return [
+            'daily_storage_rate' => 'decimal:2',
+        ];
+    }
+
+    public function shipments(): HasMany
+    {
+        return $this->hasMany(Shipment::class);
+    }
+}
+
+
+========== app\Models\WarehouseBay.php ==========
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+
+class WarehouseBay extends Model
+{
+    use HasFactory;
+
+    protected $fillable = [
+        'bay_code',
+        'max_weight_kg',
+        'max_volume_cbm',
+    ];
+
+    protected function casts(): array
+    {
+        return [
+            'max_weight_kg' => 'decimal:2',
+            'max_volume_cbm' => 'decimal:2',
+        ];
+    }
+
+    public function shipments(): HasMany
+    {
+        return $this->hasMany(Shipment::class);
+    }
+}
+
+
+========== app\Models\Shipment.php ==========
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
+
+class Shipment extends Model
+{
+    use HasFactory;
+
+    protected $fillable = [
+        'sender_company_id',
+        'receiver_company_id',
+        'cargo_category_id',
+        'warehouse_bay_id',
+        'weight_kg',
+        'volume_cbm',
+        'arrival_date',
+        'dispatch_date',
+    ];
+
+    protected function casts(): array
+    {
+        return [
+            'weight_kg' => 'decimal:2',
+            'volume_cbm' => 'decimal:2',
+            'arrival_date' => 'date',
+            'dispatch_date' => 'date',
+        ];
+    }
+
+    public function sender(): BelongsTo
+    {
+        return $this->belongsTo(Company::class, 'sender_company_id');
+    }
+
+    public function receiver(): BelongsTo
+    {
+        return $this->belongsTo(Company::class, 'receiver_company_id');
+    }
+
+    public function cargoCategory(): BelongsTo
+    {
+        return $this->belongsTo(CargoCategory::class);
+    }
+
+    public function warehouseBay(): BelongsTo
+    {
+        return $this->belongsTo(WarehouseBay::class);
+    }
+
+    public function billingStatement(): HasOne
+    {
+        return $this->hasOne(BillingStatement::class);
+    }
+}
+
+
+========== app\Models\BillingStatement.php ==========
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+
+class BillingStatement extends Model
+{
+    use HasFactory;
+
+    protected $fillable = [
+        'shipment_id',
+        'storage_fee',
+        'shipping_fee',
+        'total_cost',
+    ];
+
+    protected function casts(): array
+    {
+        return [
+            'storage_fee' => 'decimal:2',
+            'shipping_fee' => 'decimal:2',
+            'total_cost' => 'decimal:2',
+        ];
+    }
+
+    public function shipment(): BelongsTo
+    {
+        return $this->belongsTo(Shipment::class);
+    }
+}
+
+
+========== app\Http\Middleware\HandleInertiaRequests.php ==========
+<?php
+
+namespace App\Http\Middleware;
+
+use Illuminate\Foundation\Inspiring;
+use Illuminate\Http\Request;
+use Inertia\Middleware;
+
+class HandleInertiaRequests extends Middleware
+{
+    /**
+     * The root template that's loaded on the first page visit.
+     *
+     * @see https://inertiajs.com/server-side-setup#root-template
+     *
+     * @var string
+     */
+    protected $rootView = 'app';
+
+    /**
+     * Determines the current asset version.
+     *
+     * @see https://inertiajs.com/asset-versioning
+     */
+    public function version(Request $request): ?string
+    {
+        return parent::version($request);
+    }
+
+    /**
+     * Define the props that are shared by default.
+     *
+     * @see https://inertiajs.com/shared-data
+     *
+     * @return array<string, mixed>
+     */
+    public function share(Request $request): array
+    {
+        [$message, $author] = str(Inspiring::quotes()->random())->explode('-');
+
+        return array_merge(parent::share($request), [
+            ...parent::share($request),
+            'name' => config('app.name'),
+            'quote' => ['message' => trim($message), 'author' => trim($author)],
+            'auth' => [
+                'user' => $request->user(),
+            ],
+        ]);
+    }
+}
+

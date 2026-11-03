@@ -1,4 +1,4 @@
-flowchart TD
+FLOWCHART TD
     User([User])
     Routes["Routes<br/>routes/web.php"]
 
